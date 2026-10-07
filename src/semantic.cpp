@@ -183,6 +183,30 @@ void SemanticAnalyzer::analyzeStatement(
 
         return;
     }
+
+    if (auto ifStatement =
+            dynamic_cast<const IfStmt*>(statement)) {
+
+        analyzeExpression(
+            ifStatement->condition.get()
+        );
+
+        if (ifStatement->condition->type != ValueType::BOOL) {
+            throw std::runtime_error(
+                "If condition must be boolean"
+            );
+        }
+
+        for (const auto& stmt : ifStatement->thenBranch) {
+            analyzeStatement(stmt.get());
+        }
+
+        for (const auto& stmt : ifStatement->elseBranch) {
+            analyzeStatement(stmt.get());
+        }
+
+        return;
+    }
 }
 
 void SemanticAnalyzer::analyze(

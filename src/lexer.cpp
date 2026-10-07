@@ -110,6 +110,33 @@ std::vector<Token> Lexer::tokenize() {
                     line,
                     startColumn
                 });
+            } else if (word == "if") {
+                tokens.push_back({
+                    TokenType::IF,
+                    word,
+                    line,
+                    startColumn
+                });
+            } else if (word == "else") {
+                tokens.push_back({
+                    TokenType::ELSE,
+                    word,
+                    line,
+                    startColumn
+                });} else if (word == "if") {
+                tokens.push_back({
+                    TokenType::IF,
+                    word,
+                    line,
+                    startColumn
+                });
+            } else if (word == "else") {
+                tokens.push_back({
+                    TokenType::ELSE,
+                    word,
+                    line,
+                    startColumn
+                });
             } else {
                 tokens.push_back({
                     TokenType::IDENTIFIER,

@@ -243,6 +243,10 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
         return parsePrint();
     }
 
+    if (check(TokenType::IF)) {
+        return parseIf();
+    }
+
     if (check(TokenType::VAR)) {
         return parseVarDeclaration();
     }
@@ -259,4 +263,60 @@ std::vector<std::unique_ptr<Stmt>> Parser::parse() {
     }
 
     return statements;
+}
+
+std::vector<std::unique_ptr<Stmt>> Parser::parseBlock() {
+
+    consume(
+        TokenType::LBRACE,
+        "Expected '{'"
+    );
+
+    std::vector<std::unique_ptr<Stmt>> statements;
+
+    while (!check(TokenType::RBRACE) &&
+           !check(TokenType::END_OF_FILE)) {
+
+        statements.push_back(parseStatement());
+    }
+
+    consume(
+        TokenType::RBRACE,
+        "Expected '}' after block"
+    );
+
+    return statements;
+}
+
+std::unique_ptr<Stmt> Parser::parseIf() {
+
+    advance(); // if
+
+    consume(
+        TokenType::LPAREN,
+        "Expected '(' after 'if'"
+    );
+
+    auto condition = parseExpression();
+
+    consume(
+        TokenType::RPAREN,
+        "Expected ')' after condition"
+    );
+
+    auto thenBranch = parseBlock();
+
+    std::vector<std::unique_ptr<Stmt>> elseBranch;
+
+    if (check(TokenType::ELSE)) {
+        advance();
+
+        elseBranch = parseBlock();
+    }
+
+    return std::make_unique<IfStmt>(
+        std::move(condition),
+        std::move(thenBranch),
+        std::move(elseBranch)
+    );
 }

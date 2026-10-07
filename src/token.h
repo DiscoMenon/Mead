@@ -6,6 +6,8 @@ enum class TokenType {
     // Keywords
     PRINT,
     VAR,
+    IF,
+    ELSE,
 
     // Literals
     INTEGER,

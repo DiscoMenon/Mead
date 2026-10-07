@@ -97,3 +97,19 @@ struct VarDeclStmt : Stmt {
         : name(name),
           initializer(std::move(initializer)) {}
 };
+
+struct IfStmt : Stmt {
+    std::unique_ptr<Expr> condition;
+
+    std::vector<std::unique_ptr<Stmt>> thenBranch;
+    std::vector<std::unique_ptr<Stmt>> elseBranch;
+
+    IfStmt(
+        std::unique_ptr<Expr> condition,
+        std::vector<std::unique_ptr<Stmt>> thenBranch,
+        std::vector<std::unique_ptr<Stmt>> elseBranch
+    )
+        : condition(std::move(condition)),
+          thenBranch(std::move(thenBranch)),
+          elseBranch(std::move(elseBranch)) {}
+};

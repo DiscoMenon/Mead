@@ -1,6 +1,7 @@
 var x = 10;
-var bigger = x > 5;
-var valid = x > 5 && x < 20;
 
-print(bigger);
-print(valid);
+if (x > 5) {
+    print("big");
+} else {
+    print("small");
+}
