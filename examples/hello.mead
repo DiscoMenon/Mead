@@ -1,7 +1,5 @@
 var x = 10;
 
-if (x > 5) {
-    print("big");
-} else {
-    print("small");
+while (x > 5) {
+    print("hello");
 }

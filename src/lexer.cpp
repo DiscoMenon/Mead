@@ -137,6 +137,13 @@ std::vector<Token> Lexer::tokenize() {
                     line,
                     startColumn
                 });
+            } else if (word == "while") {
+                tokens.push_back({
+                    TokenType::WHILE,
+                    word,
+                    line,
+                    startColumn
+                });
             } else {
                 tokens.push_back({
                     TokenType::IDENTIFIER,

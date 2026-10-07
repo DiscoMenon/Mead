@@ -207,6 +207,25 @@ void SemanticAnalyzer::analyzeStatement(
 
         return;
     }
+    if (auto whileStatement =
+            dynamic_cast<const WhileStmt*>(statement)) {
+
+        analyzeExpression(
+            whileStatement->condition.get()
+        );
+
+        if (whileStatement->condition->type != ValueType::BOOL) {
+            throw std::runtime_error(
+                "While condition must be boolean"
+            );
+        }
+
+        for (const auto& stmt : whileStatement->body) {
+            analyzeStatement(stmt.get());
+        }
+
+        return;
+    }
 }
 
 void SemanticAnalyzer::analyze(

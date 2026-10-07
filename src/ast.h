@@ -113,3 +113,15 @@ struct IfStmt : Stmt {
           thenBranch(std::move(thenBranch)),
           elseBranch(std::move(elseBranch)) {}
 };
+
+struct WhileStmt : Stmt {
+    std::unique_ptr<Expr> condition;
+    std::vector<std::unique_ptr<Stmt>> body;
+
+    WhileStmt(
+        std::unique_ptr<Expr> condition,
+        std::vector<std::unique_ptr<Stmt>> body
+    )
+        : condition(std::move(condition)),
+          body(std::move(body)) {}
+};

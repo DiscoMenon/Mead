@@ -247,6 +247,10 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
         return parseIf();
     }
 
+    if (check(TokenType::WHILE)) {
+        return parseWhile();
+    }
+
     if (check(TokenType::VAR)) {
         return parseVarDeclaration();
     }
@@ -318,5 +322,29 @@ std::unique_ptr<Stmt> Parser::parseIf() {
         std::move(condition),
         std::move(thenBranch),
         std::move(elseBranch)
+    );
+}
+
+std::unique_ptr<Stmt> Parser::parseWhile() {
+
+    advance(); // while
+
+    consume(
+        TokenType::LPAREN,
+        "Expected '(' after 'while'"
+    );
+
+    auto condition = parseExpression();
+
+    consume(
+        TokenType::RPAREN,
+        "Expected ')' after condition"
+    );
+
+    auto body = parseBlock();
+
+    return std::make_unique<WhileStmt>(
+        std::move(condition),
+        std::move(body)
     );
 }

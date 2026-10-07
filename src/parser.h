@@ -36,6 +36,7 @@ private:
     std::unique_ptr<Expr> parseLogicalOr();
     std::unique_ptr<Stmt> parseIf();
     std::vector<std::unique_ptr<Stmt>> parseBlock();
+    std::unique_ptr<Stmt> parseWhile();
 
 public:
     explicit Parser(const std::vector<Token>& tokens);

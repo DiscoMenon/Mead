@@ -8,6 +8,7 @@ enum class TokenType {
     VAR,
     IF,
     ELSE,
+    WHILE,
 
     // Literals
     INTEGER,
