@@ -10,4 +10,5 @@ add_executable(meadc
     src/lexer.cpp
     src/parser.cpp
     src/semantic.cpp
+    src/codegen.cpp
 )
