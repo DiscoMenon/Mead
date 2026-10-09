@@ -1,23 +1,44 @@
+
 #include "lexer.h"
 #include "parser.h"
 #include "semantic.h"
 #include "codegen.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
-int main() {
-    std::ifstream file("../examples/hello.mead");
-
-    if (!file) {
-        std::cerr << "Could not open ../examples/hello.mead\n";
+int main(int argc, char* argv[]) {
+    if (argc != 2 && argc != 4) {
+        std::cerr
+            << "Usage: meadc <source.mead> [-o output.asm]\n";
         return 1;
     }
 
-    std::string source(
+    const std::filesystem::path sourcePath = argv[1];
+    std::filesystem::path outputPath = sourcePath;
+
+    if (argc == 4) {
+        if (std::string(argv[2]) != "-o") {
+            std::cerr << "Unknown option: " << argv[2] << '\n';
+            return 1;
+        }
+        outputPath = argv[3];
+    } else {
+        outputPath.replace_extension(".asm");
+    }
+
+    std::ifstream file(sourcePath);
+    if (!file) {
+        std::cerr << "meadc: cannot open source file: "
+                  << sourcePath.string() << '\n';
+        return 1;
+    }
+
+    const std::string source(
         (std::istreambuf_iterator<char>(file)),
         std::istreambuf_iterator<char>()
     );
@@ -33,11 +54,12 @@ int main() {
         analyzer.analyze(statements);
 
         CodeGenerator generator;
-        std::string assembly = generator.generate(statements);
+        const std::string assembly = generator.generate(statements);
 
-        std::ofstream output("generated.asm");
+        std::ofstream output(outputPath);
         if (!output) {
-            std::cerr << "Could not create generated.asm\n";
+            std::cerr << "meadc: cannot create output file: "
+                      << outputPath.string() << '\n';
             return 1;
         }
 
@@ -45,20 +67,18 @@ int main() {
         output.close();
 
         if (!output) {
-            std::cerr << "Failed to write generated.asm\n";
+            std::cerr << "meadc: failed writing output file: "
+                      << outputPath.string() << '\n';
             return 1;
         }
 
         std::cout << "Compilation successful.\n"
-                  << "Generated generated.asm from "
-                  << statements.size()
-                  << " statement(s).\n";
-    }
-    catch (const std::exception& error) {
-        std::cerr << "Compilation error: "
+                  << "Source: " << sourcePath.string() << '\n'
+                  << "Assembly: " << outputPath.string() << '\n';
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "meadc: compilation failed: "
                   << error.what() << '\n';
         return 1;
     }
-
-    return 0;
 }

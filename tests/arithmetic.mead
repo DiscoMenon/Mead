@@ -1,0 +1,10 @@
+
+var x = 10;
+var y = 20;
+
+print("Arithmetic:");
+print(x + y);
+print(x * y);
+print(x - y);
+print(x / 2);
+print(x % 3);
