@@ -1,5 +1,19 @@
 var x = 10;
+var y = 20;
 
-while (x > 5) {
-    print("hello");
+print("Arithmetic:");
+print(x + y);
+print(x * y);
+print(x - y);
+
+if (x < y) {
+    print("x is smaller");
+} else {
+    print("unexpected");
+}
+
+var i = 0;
+while (i < 3) {
+    print(i);
+    i = i + 1;
 }

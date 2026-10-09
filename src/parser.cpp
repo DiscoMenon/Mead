@@ -237,6 +237,26 @@ std::unique_ptr<Stmt> Parser::parseVarDeclaration() {
     );
 }
 
+std::unique_ptr<Stmt> Parser::parseAssignment() {
+    const Token& name = consume(
+        TokenType::IDENTIFIER,
+        "Expected variable name"
+    );
+
+    consume(TokenType::EQUAL, "Expected '=' in assignment");
+
+    auto value = parseExpression();
+
+    consume(
+        TokenType::SEMICOLON,
+        "Expected ';' after assignment"
+    );
+
+    return std::make_unique<AssignmentStmt>(
+        name.value, std::move(value)
+    );
+}
+
 std::unique_ptr<Stmt> Parser::parseStatement() {
 
     if (check(TokenType::PRINT)) {
@@ -253,6 +273,10 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
 
     if (check(TokenType::VAR)) {
         return parseVarDeclaration();
+    }
+
+    if (check(TokenType::IDENTIFIER)) {
+        return parseAssignment();
     }
 
     throw std::runtime_error("Expected statement");

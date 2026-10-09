@@ -26,6 +26,7 @@ private:
 
     std::unique_ptr<Stmt> parsePrint();
     std::unique_ptr<Stmt> parseVarDeclaration();
+    std::unique_ptr<Stmt> parseAssignment();
 
     std::unique_ptr<Expr> parseExpression();
     std::unique_ptr<Expr> parseAddition();
@@ -37,6 +38,7 @@ private:
     std::unique_ptr<Stmt> parseIf();
     std::vector<std::unique_ptr<Stmt>> parseBlock();
     std::unique_ptr<Stmt> parseWhile();
+    
 
 public:
     explicit Parser(const std::vector<Token>& tokens);

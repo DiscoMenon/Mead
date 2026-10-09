@@ -98,6 +98,16 @@ struct VarDeclStmt : Stmt {
           initializer(std::move(initializer)) {}
 };
 
+struct AssignmentStmt : Stmt {
+    std::string name;
+    std::unique_ptr<Expr> value;
+
+    AssignmentStmt(
+        const std::string& name,
+        std::unique_ptr<Expr> value
+    ) : name(name), value(std::move(value)) {}
+};
+
 struct IfStmt : Stmt {
     std::unique_ptr<Expr> condition;
 

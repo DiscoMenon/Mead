@@ -174,6 +174,29 @@ void SemanticAnalyzer::analyzeStatement(
         return;
     }
 
+    if (auto assignment =
+            dynamic_cast<const AssignmentStmt*>(statement)) {
+
+        auto it = variables.find(assignment->name);
+
+        if (it == variables.end()) {
+            throw std::runtime_error(
+                "Assignment to undefined variable: " + assignment->name
+            );
+        }
+
+        analyzeExpression(assignment->value.get());
+
+        if (assignment->value->type != it->second) {
+            throw std::runtime_error(
+                "Assignment changes the type of variable: "
+                + assignment->name
+            );
+        }
+
+        return;
+    }
+
     if (auto print =
             dynamic_cast<const PrintStmt*>(statement)) {
 
