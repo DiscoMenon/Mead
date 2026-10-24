@@ -89,7 +89,11 @@ std::vector<Token> Lexer::tokenize() {
                 column++;
             }
 
-            if (word == "print") {
+            if (word == "func") {
+                tokens.push_back({TokenType::FUNC, word, line, startColumn});
+            } else if (word == "return") {
+                tokens.push_back({TokenType::RETURN, word, line, startColumn});
+            } else if (word == "print") {
                 tokens.push_back({
                     TokenType::PRINT,
                     word,
@@ -111,19 +115,6 @@ std::vector<Token> Lexer::tokenize() {
                     startColumn
                 });
             } else if (word == "if") {
-                tokens.push_back({
-                    TokenType::IF,
-                    word,
-                    line,
-                    startColumn
-                });
-            } else if (word == "else") {
-                tokens.push_back({
-                    TokenType::ELSE,
-                    word,
-                    line,
-                    startColumn
-                });} else if (word == "if") {
                 tokens.push_back({
                     TokenType::IF,
                     word,

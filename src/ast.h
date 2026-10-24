@@ -60,6 +60,17 @@ struct VariableExpr : Expr {
         : name(name) {}
 };
 
+struct CallExpr : Expr {
+    std::string name;
+    std::vector<std::unique_ptr<Expr>> arguments;
+
+    CallExpr(
+        const std::string& name,
+        std::vector<std::unique_ptr<Expr>> arguments
+    )
+        : name(name), arguments(std::move(arguments)) {}
+};
+
 struct BinaryExpr : Expr {
     std::unique_ptr<Expr> left;
     std::string op;
@@ -77,6 +88,35 @@ struct BinaryExpr : Expr {
 
 struct Stmt {
     virtual ~Stmt() = default;
+};
+
+struct FunctionStmt : Stmt {
+    std::string name;
+    std::vector<std::string> parameters;
+    std::vector<std::unique_ptr<Stmt>> body;
+
+    FunctionStmt(
+        const std::string& name,
+        std::vector<std::string> parameters,
+        std::vector<std::unique_ptr<Stmt>> body
+    )
+        : name(name),
+          parameters(std::move(parameters)),
+          body(std::move(body)) {}
+};
+
+struct ReturnStmt : Stmt {
+    std::unique_ptr<Expr> value;
+
+    explicit ReturnStmt(std::unique_ptr<Expr> value)
+        : value(std::move(value)) {}
+};
+
+struct ExprStmt : Stmt {
+    std::unique_ptr<Expr> expression;
+
+    explicit ExprStmt(std::unique_ptr<Expr> expression)
+        : expression(std::move(expression)) {}
 };
 
 struct PrintStmt : Stmt {

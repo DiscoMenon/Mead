@@ -1,374 +1,111 @@
 #include "parser.h"
-
 #include <stdexcept>
 #include <string>
 
-Parser::Parser(const std::vector<Token>& tokens)
-    : tokens(tokens), current(0) {
-}
-
-const Token& Parser::peek() const {
-    return tokens[current];
-}
-
-const Token& Parser::advance() {
-    return tokens[current++];
-}
-
-bool Parser::check(TokenType type) const {
-    return peek().type == type;
-}
-
-const Token& Parser::consume(
-    TokenType type,
-    const std::string& message
-) {
-    if (check(type)) {
-        return advance();
-    }
-
+Parser::Parser(const std::vector<Token>& tokens) : tokens(tokens), current(0) {}
+const Token& Parser::peek() const { return tokens[current]; }
+const Token& Parser::advance() { return tokens[current++]; }
+bool Parser::check(TokenType type) const { return peek().type == type; }
+const Token& Parser::consume(TokenType type, const std::string& message) {
+    if (check(type)) return advance();
     throw std::runtime_error(message);
 }
 
 std::unique_ptr<Expr> Parser::parseComparison() {
-
     auto expression = parseAddition();
-
-    while (
-        check(TokenType::LESS) ||
-        check(TokenType::LESS_EQUAL) ||
-        check(TokenType::GREATER) ||
-        check(TokenType::GREATER_EQUAL) ||
-        check(TokenType::EQUAL_EQUAL) ||
-        check(TokenType::NOT_EQUAL)
-    ) {
-        Token op = advance();
-
-        auto right = parseAddition();
-
-        expression = std::make_unique<BinaryExpr>(
-            std::move(expression),
-            op.value,
-            std::move(right)
-        );
+    while (check(TokenType::LESS) || check(TokenType::LESS_EQUAL) ||
+           check(TokenType::GREATER) || check(TokenType::GREATER_EQUAL) ||
+           check(TokenType::EQUAL_EQUAL) || check(TokenType::NOT_EQUAL)) {
+        Token op = advance(); auto right = parseAddition();
+        expression = std::make_unique<BinaryExpr>(std::move(expression), op.value, std::move(right));
     }
-
     return expression;
 }
-
 std::unique_ptr<Expr> Parser::parseLogicalAnd() {
-
     auto expression = parseComparison();
-
-    while (check(TokenType::AND)) {
-        Token op = advance();
-
-        auto right = parseComparison();
-
-        expression = std::make_unique<BinaryExpr>(
-            std::move(expression),
-            op.value,
-            std::move(right)
-        );
-    }
-
+    while (check(TokenType::AND)) { Token op = advance(); auto right = parseComparison(); expression = std::make_unique<BinaryExpr>(std::move(expression), op.value, std::move(right)); }
     return expression;
 }
-
 std::unique_ptr<Expr> Parser::parseLogicalOr() {
-
     auto expression = parseLogicalAnd();
-
-    while (check(TokenType::OR)) {
-        Token op = advance();
-
-        auto right = parseLogicalAnd();
-
-        expression = std::make_unique<BinaryExpr>(
-            std::move(expression),
-            op.value,
-            std::move(right)
-        );
-    }
-
+    while (check(TokenType::OR)) { Token op = advance(); auto right = parseLogicalAnd(); expression = std::make_unique<BinaryExpr>(std::move(expression), op.value, std::move(right)); }
     return expression;
 }
-
 std::unique_ptr<Expr> Parser::parsePrimary() {
-
-    if (check(TokenType::INTEGER)) {
-        int value = std::stoi(advance().value);
-        return std::make_unique<IntegerExpr>(value);
-    }
-
-    if (check(TokenType::STRING)) {
-        return std::make_unique<StringExpr>(advance().value);
-    }
-
-    if (check(TokenType::FLOAT)) {
-        double value = std::stod(advance().value);
-        return std::make_unique<FloatExpr>(value);
-    }
-
-    if (check(TokenType::BOOL)) {
-        bool value = advance().value == "true";
-        return std::make_unique<BoolExpr>(value);
-    }
-
+    if (check(TokenType::INTEGER)) return std::make_unique<IntegerExpr>(std::stoi(advance().value));
+    if (check(TokenType::STRING)) return std::make_unique<StringExpr>(advance().value);
+    if (check(TokenType::FLOAT)) return std::make_unique<FloatExpr>(std::stod(advance().value));
+    if (check(TokenType::BOOL)) return std::make_unique<BoolExpr>(advance().value == "true");
     if (check(TokenType::IDENTIFIER)) {
-        return std::make_unique<VariableExpr>(advance().value);
-    }
-
-    if (check(TokenType::LPAREN)) {
+        std::string name = advance().value;
+        if (!check(TokenType::LPAREN)) return std::make_unique<VariableExpr>(name);
         advance();
-
-        auto expression = parseExpression();
-
-        consume(
-            TokenType::RPAREN,
-            "Expected ')' after expression"
-        );
-
-        return expression;
+        std::vector<std::unique_ptr<Expr>> args;
+        if (!check(TokenType::RPAREN)) {
+            do {
+                args.push_back(parseExpression());
+                if (!check(TokenType::COMMA)) break;
+                advance();
+            } while (true);
+        }
+        consume(TokenType::RPAREN, "Expected ')' after function arguments");
+        return std::make_unique<CallExpr>(name, std::move(args));
     }
-
+    if (check(TokenType::LPAREN)) { advance(); auto e = parseExpression(); consume(TokenType::RPAREN, "Expected ')' after expression"); return e; }
     throw std::runtime_error("Expected expression");
 }
-
 std::unique_ptr<Expr> Parser::parseMultiplication() {
-
     auto expression = parsePrimary();
-
-    while (
-        check(TokenType::STAR) ||
-        check(TokenType::SLASH) ||
-        check(TokenType::PERCENT)
-    ) {
-        Token op = advance();
-
-        auto right = parsePrimary();
-
-        expression = std::make_unique<BinaryExpr>(
-            std::move(expression),
-            op.value,
-            std::move(right)
-        );
-    }
-
+    while (check(TokenType::STAR) || check(TokenType::SLASH) || check(TokenType::PERCENT)) { Token op = advance(); auto right = parsePrimary(); expression = std::make_unique<BinaryExpr>(std::move(expression), op.value, std::move(right)); }
     return expression;
 }
-
 std::unique_ptr<Expr> Parser::parseAddition() {
-
     auto expression = parseMultiplication();
-
-    while (
-        check(TokenType::PLUS) ||
-        check(TokenType::MINUS)
-    ) {
-        Token op = advance();
-
-        auto right = parseMultiplication();
-
-        expression = std::make_unique<BinaryExpr>(
-            std::move(expression),
-            op.value,
-            std::move(right)
-        );
-    }
-
+    while (check(TokenType::PLUS) || check(TokenType::MINUS)) { Token op = advance(); auto right = parseMultiplication(); expression = std::make_unique<BinaryExpr>(std::move(expression), op.value, std::move(right)); }
     return expression;
 }
-
-std::unique_ptr<Expr> Parser::parseExpression() {
-    return parseLogicalOr();
-}
-
+std::unique_ptr<Expr> Parser::parseExpression() { return parseLogicalOr(); }
 std::unique_ptr<Stmt> Parser::parsePrint() {
-
-    advance(); // print
-
-    consume(
-        TokenType::LPAREN,
-        "Expected '(' after print"
-    );
-
-    auto expression = parseExpression();
-
-    consume(
-        TokenType::RPAREN,
-        "Expected ')' after expression"
-    );
-
-    consume(
-        TokenType::SEMICOLON,
-        "Expected ';' after print statement"
-    );
-
-    return std::make_unique<PrintStmt>(
-        std::move(expression)
-    );
+    advance(); consume(TokenType::LPAREN, "Expected '(' after print"); auto e = parseExpression(); consume(TokenType::RPAREN, "Expected ')' after expression"); consume(TokenType::SEMICOLON, "Expected ';' after print statement"); return std::make_unique<PrintStmt>(std::move(e));
 }
-
 std::unique_ptr<Stmt> Parser::parseVarDeclaration() {
-
-    advance(); // var
-
-    const Token& name = consume(
-        TokenType::IDENTIFIER,
-        "Expected variable name after 'var'"
-    );
-
-    consume(
-        TokenType::EQUAL,
-        "Expected '=' after variable name"
-    );
-
-    auto initializer = parseExpression();
-
-    consume(
-        TokenType::SEMICOLON,
-        "Expected ';' after variable declaration"
-    );
-
-    return std::make_unique<VarDeclStmt>(
-        name.value,
-        std::move(initializer)
-    );
+    advance(); auto name = consume(TokenType::IDENTIFIER, "Expected variable name after 'var'"); consume(TokenType::EQUAL, "Expected '=' after variable name"); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after variable declaration"); return std::make_unique<VarDeclStmt>(name.value, std::move(value));
 }
-
 std::unique_ptr<Stmt> Parser::parseAssignment() {
-    const Token& name = consume(
-        TokenType::IDENTIFIER,
-        "Expected variable name"
-    );
-
-    consume(TokenType::EQUAL, "Expected '=' in assignment");
-
-    auto value = parseExpression();
-
-    consume(
-        TokenType::SEMICOLON,
-        "Expected ';' after assignment"
-    );
-
-    return std::make_unique<AssignmentStmt>(
-        name.value, std::move(value)
-    );
+    auto name = consume(TokenType::IDENTIFIER, "Expected variable name"); consume(TokenType::EQUAL, "Expected '=' in assignment"); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after assignment"); return std::make_unique<AssignmentStmt>(name.value, std::move(value));
 }
-
+std::unique_ptr<Stmt> Parser::parseFunction() {
+    advance(); auto name = consume(TokenType::IDENTIFIER, "Expected function name"); consume(TokenType::LPAREN, "Expected '(' after function name");
+    std::vector<std::string> params;
+    if (!check(TokenType::RPAREN)) { do { params.push_back(consume(TokenType::IDENTIFIER, "Expected parameter name").value); if (!check(TokenType::COMMA)) break; advance(); } while (true); }
+    consume(TokenType::RPAREN, "Expected ')' after parameters"); auto body = parseBlock();
+    return std::make_unique<FunctionStmt>(name.value, std::move(params), std::move(body));
+}
+std::unique_ptr<Stmt> Parser::parseReturn() {
+    advance(); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after return"); return std::make_unique<ReturnStmt>(std::move(value));
+}
 std::unique_ptr<Stmt> Parser::parseStatement() {
-
-    if (check(TokenType::PRINT)) {
-        return parsePrint();
-    }
-
-    if (check(TokenType::IF)) {
-        return parseIf();
-    }
-
-    if (check(TokenType::WHILE)) {
-        return parseWhile();
-    }
-
-    if (check(TokenType::VAR)) {
-        return parseVarDeclaration();
-    }
-
+    if (check(TokenType::FUNC)) return parseFunction();
+    if (check(TokenType::RETURN)) return parseReturn();
+    if (check(TokenType::PRINT)) return parsePrint();
+    if (check(TokenType::IF)) return parseIf();
+    if (check(TokenType::WHILE)) return parseWhile();
+    if (check(TokenType::VAR)) return parseVarDeclaration();
     if (check(TokenType::IDENTIFIER)) {
-        return parseAssignment();
+        if (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::EQUAL) return parseAssignment();
+        auto e = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after expression"); return std::make_unique<ExprStmt>(std::move(e));
     }
-
     throw std::runtime_error("Expected statement");
 }
-
-std::vector<std::unique_ptr<Stmt>> Parser::parse() {
-
-    std::vector<std::unique_ptr<Stmt>> statements;
-
-    while (!check(TokenType::END_OF_FILE)) {
-        statements.push_back(parseStatement());
-    }
-
-    return statements;
-}
-
+std::vector<std::unique_ptr<Stmt>> Parser::parse() { std::vector<std::unique_ptr<Stmt>> out; while (!check(TokenType::END_OF_FILE)) out.push_back(parseStatement()); return out; }
 std::vector<std::unique_ptr<Stmt>> Parser::parseBlock() {
-
-    consume(
-        TokenType::LBRACE,
-        "Expected '{'"
-    );
-
-    std::vector<std::unique_ptr<Stmt>> statements;
-
-    while (!check(TokenType::RBRACE) &&
-           !check(TokenType::END_OF_FILE)) {
-
-        statements.push_back(parseStatement());
-    }
-
-    consume(
-        TokenType::RBRACE,
-        "Expected '}' after block"
-    );
-
-    return statements;
+    consume(TokenType::LBRACE, "Expected '{'"); std::vector<std::unique_ptr<Stmt>> out;
+    while (!check(TokenType::RBRACE) && !check(TokenType::END_OF_FILE)) out.push_back(parseStatement());
+    consume(TokenType::RBRACE, "Expected '}' after block"); return out;
 }
-
 std::unique_ptr<Stmt> Parser::parseIf() {
-
-    advance(); // if
-
-    consume(
-        TokenType::LPAREN,
-        "Expected '(' after 'if'"
-    );
-
-    auto condition = parseExpression();
-
-    consume(
-        TokenType::RPAREN,
-        "Expected ')' after condition"
-    );
-
-    auto thenBranch = parseBlock();
-
-    std::vector<std::unique_ptr<Stmt>> elseBranch;
-
-    if (check(TokenType::ELSE)) {
-        advance();
-
-        elseBranch = parseBlock();
-    }
-
-    return std::make_unique<IfStmt>(
-        std::move(condition),
-        std::move(thenBranch),
-        std::move(elseBranch)
-    );
+    advance(); consume(TokenType::LPAREN, "Expected '(' after 'if'"); auto condition = parseExpression(); consume(TokenType::RPAREN, "Expected ')' after condition"); auto thenBranch = parseBlock(); std::vector<std::unique_ptr<Stmt>> elseBranch; if (check(TokenType::ELSE)) { advance(); elseBranch = parseBlock(); } return std::make_unique<IfStmt>(std::move(condition), std::move(thenBranch), std::move(elseBranch));
 }
-
 std::unique_ptr<Stmt> Parser::parseWhile() {
-
-    advance(); // while
-
-    consume(
-        TokenType::LPAREN,
-        "Expected '(' after 'while'"
-    );
-
-    auto condition = parseExpression();
-
-    consume(
-        TokenType::RPAREN,
-        "Expected ')' after condition"
-    );
-
-    auto body = parseBlock();
-
-    return std::make_unique<WhileStmt>(
-        std::move(condition),
-        std::move(body)
-    );
+    advance(); consume(TokenType::LPAREN, "Expected '(' after 'while'"); auto condition = parseExpression(); consume(TokenType::RPAREN, "Expected ')' after condition"); auto body = parseBlock(); return std::make_unique<WhileStmt>(std::move(condition), std::move(body));
 }

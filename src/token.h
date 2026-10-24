@@ -9,6 +9,8 @@ enum class TokenType {
     IF,
     ELSE,
     WHILE,
+    FUNC,
+    RETURN,
 
     // Literals
     INTEGER,
