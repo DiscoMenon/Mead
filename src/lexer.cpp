@@ -93,6 +93,8 @@ std::vector<Token> Lexer::tokenize() {
                 tokens.push_back({TokenType::FUNC, word, line, startColumn});
             } else if (word == "return") {
                 tokens.push_back({TokenType::RETURN, word, line, startColumn});
+            } else if (word == "watch") {
+                tokens.push_back({TokenType::WATCH, word, line, startColumn});
             } else if (word == "print") {
                 tokens.push_back({
                     TokenType::PRINT,

@@ -11,6 +11,7 @@ enum class TokenType {
     WHILE,
     FUNC,
     RETURN,
+    WATCH,
 
     // Literals
     INTEGER,

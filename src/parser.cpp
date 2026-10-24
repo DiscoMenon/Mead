@@ -121,12 +121,19 @@ std::unique_ptr<Stmt> Parser::parseFunction() {
     consume(TokenType::RPAREN, "Expected ')' after parameters"); auto body = parseBlock();
     return std::make_unique<FunctionStmt>(name.value, std::move(params), std::move(body));
 }
+std::unique_ptr<Stmt> Parser::parseWatch() {
+    advance();
+    auto variable = consume(TokenType::IDENTIFIER, "Expected variable name after 'watch'");
+    auto body = parseBlock();
+    return std::make_unique<WatchStmt>(variable.value, std::move(body));
+}
 std::unique_ptr<Stmt> Parser::parseReturn() {
     advance(); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after return"); return std::make_unique<ReturnStmt>(std::move(value));
 }
 std::unique_ptr<Stmt> Parser::parseStatement() {
     if (check(TokenType::FUNC)) return parseFunction();
     if (check(TokenType::RETURN)) return parseReturn();
+    if (check(TokenType::WATCH)) return parseWatch();
     if (check(TokenType::PRINT)) return parsePrint();
     if (check(TokenType::IF)) return parseIf();
     if (check(TokenType::WHILE)) return parseWhile();

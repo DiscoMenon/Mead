@@ -1,5 +1,6 @@
 #include "codegen.h"
 #include <functional>
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -15,11 +16,18 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
     std::function<void(const std::vector<std::unique_ptr<Stmt>>&, const std::string&, const std::vector<std::string>&, bool)> emitFunction;
     emitFunction = [&](const std::vector<std::unique_ptr<Stmt>>& body, const std::string& functionName, const std::vector<std::string>& params, bool isMain) {
         std::unordered_map<std::string,int> slots; int slotCount=0;
+        std::vector<const WatchStmt*> watchers;
         for(const auto& p:params) slots[p]=++slotCount;
         std::function<void(const Stmt*)> collect=[&](const Stmt* s){
             if(auto v=dynamic_cast<const VarDeclStmt*>(s)){ if(!slots.count(v->name)) slots[v->name]=++slotCount; }
             else if(auto i=dynamic_cast<const IfStmt*>(s)){ for(auto& x:i->thenBranch) collect(x.get()); for(auto& x:i->elseBranch) collect(x.get()); }
             else if(auto w=dynamic_cast<const WhileStmt*>(s)){ for(auto& x:w->body) collect(x.get()); }
+            else if(auto w=dynamic_cast<const WatchStmt*>(s)){
+                const std::string snapshot = "__watch_snapshot_" + std::to_string(watchers.size());
+                if (!slots.count(snapshot)) slots[snapshot] = ++slotCount;
+                watchers.push_back(w);
+                for(auto& x:w->body) collect(x.get());
+            }
         };
         for(const auto& s:body) if(!dynamic_cast<const FunctionStmt*>(s.get())) collect(s.get());
         int frameSize = (40 + slotCount * 8 + 15) & ~15;
@@ -27,7 +35,11 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
         code << (isMain?"main":fnLabel(functionName)) << " PROC\n    push rbp\n    mov rbp, rsp\n    sub rsp, " << frameSize << "\n";
         if(!isMain){ const char* regs[]={"rcx","rdx","r8","r9"}; for(size_t i=0;i<params.size();++i) code << "    mov QWORD PTR [rbp-" << slots[params[i]]*8 << "], " << regs[i] << "\n"; }
         auto slot=[&](const std::string& n)->int { auto it=slots.find(n); if(it==slots.end()) throw std::runtime_error("Unknown variable: "+n); return it->second*8; };
-        std::function<void(const Expr*)> emitExpr; std::function<void(const Stmt*)> emitStmt; int stackDepth = 0;
+        std::function<void(const Expr*)> emitExpr;
+        std::function<void(const Stmt*)> emitStmt;
+        std::function<void(const std::string&)> emitWatchTriggers;
+        bool emittingWatchBody = false;
+        int stackDepth = 0;
         auto emitWriteBytes = [&](const std::string& text) {
             if (text.empty()) return;
             std::string label = "mead_string_" + std::to_string(stringCount++);
@@ -80,7 +92,17 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
             if(auto r=dynamic_cast<const ReturnStmt*>(s)){ emitExpr(r->value.get()); code<<"    jmp "<<endLabel<<"\n"; }
             else if(auto e=dynamic_cast<const ExprStmt*>(s)) emitExpr(e->expression.get());
             else if(auto v=dynamic_cast<const VarDeclStmt*>(s)){ emitExpr(v->initializer.get()); code<<"    mov QWORD PTR [rbp-"<<slot(v->name)<<"], rax\n"; }
-            else if(auto a=dynamic_cast<const AssignmentStmt*>(s)){ emitExpr(a->value.get()); code<<"    mov QWORD PTR [rbp-"<<slot(a->name)<<"], rax\n"; }
+            else if(auto a=dynamic_cast<const AssignmentStmt*>(s)){
+                emitExpr(a->value.get());
+                code << "    mov QWORD PTR [rbp-" << slot(a->name) << "], rax\n";
+                if (!emittingWatchBody && emitWatchTriggers) emitWatchTriggers(a->name);
+            }
+            else if(auto watch=dynamic_cast<const WatchStmt*>(s)){
+                auto it = std::find(watchers.begin(), watchers.end(), watch);
+                const int index = static_cast<int>(std::distance(watchers.begin(), it));
+                code << "    mov rax, QWORD PTR [rbp-" << slot(watch->variable) << "]\n"
+                     << "    mov QWORD PTR [rbp-" << slot("__watch_snapshot_" + std::to_string(index)) << "], rax\n";
+            }
             else if(auto p=dynamic_cast<const PrintStmt*>(s)){
                 if(auto str=dynamic_cast<const StringExpr*>(p->expression.get())) {
                     emitWriteBytes(str->value + "\r\n");
@@ -115,6 +137,24 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
             else if(auto i=dynamic_cast<const IfStmt*>(s)){ int id=labelCount++; auto els="mead_else_"+std::to_string(id), end="mead_if_end_"+std::to_string(id); emitExpr(i->condition.get()); code<<"    test rax, rax\n    jz "<<els<<"\n"; for(auto& x:i->thenBranch) emitStmt(x.get()); if(!i->elseBranch.empty()) code<<"    jmp "<<end<<"\n"; code<<els<<":\n"; for(auto& x:i->elseBranch) emitStmt(x.get()); if(!i->elseBranch.empty()) code<<end<<":\n"; }
             else if(auto w=dynamic_cast<const WhileStmt*>(s)){ int id=labelCount++; auto start="mead_while_"+std::to_string(id), end="mead_while_end_"+std::to_string(id); code<<start<<":\n"; emitExpr(w->condition.get()); code<<"    test rax, rax\n    jz "<<end<<"\n"; for(auto& x:w->body) emitStmt(x.get()); code<<"    jmp "<<start<<"\n"<<end<<":\n"; }
             else throw std::runtime_error("Unsupported statement in code generation");
+        };
+        emitWatchTriggers = [&](const std::string& changedName) {
+            for (size_t i = 0; i < watchers.size(); ++i) {
+                const auto* watch = watchers[i];
+                if (watch->variable != changedName) continue;
+                const int id = labelCount++;
+                const std::string done = "mead_watch_done_" + std::to_string(id);
+                const std::string snapshotName = "__watch_snapshot_" + std::to_string(i);
+                code << "    mov rax, QWORD PTR [rbp-" << slot(watch->variable) << "]\n"
+                     << "    cmp rax, QWORD PTR [rbp-" << slot(snapshotName) << "]\n"
+                     << "    je " << done << "\n"
+                     << "    mov QWORD PTR [rbp-" << slot(snapshotName) << "], rax\n";
+                const bool previous = emittingWatchBody;
+                emittingWatchBody = true;
+                for (const auto& child : watch->body) emitStmt(child.get());
+                emittingWatchBody = previous;
+                code << done << ":\n";
+            }
         };
         for(const auto& s:body) if(!dynamic_cast<const FunctionStmt*>(s.get())) emitStmt(s.get());
         code<<endLabel<<":\n";

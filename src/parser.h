@@ -37,6 +37,7 @@ private:
     std::unique_ptr<Expr> parseLogicalOr();
     std::unique_ptr<Stmt> parseFunction();
     std::unique_ptr<Stmt> parseReturn();
+    std::unique_ptr<Stmt> parseWatch();
     std::unique_ptr<Stmt> parseIf();
     std::vector<std::unique_ptr<Stmt>> parseBlock();
     std::unique_ptr<Stmt> parseWhile();

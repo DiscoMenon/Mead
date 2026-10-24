@@ -23,6 +23,7 @@ EXPECTED_OUTPUTS = {
     ),
     "functions.mead": "5\n25\n30\n",
     "string_interpolation.mead": "Count: 3\n2 + 3 = 5\nActive: true\nNo placeholders here\n",
+    "watch.mead": "count changed to 2\ncount changed to 3\n",
 }
 
 INVALID_TESTS = {

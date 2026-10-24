@@ -1,0 +1,7 @@
+var count = 1;
+watch count {
+    print("count changed to ${count}");
+}
+count = 2;
+count = 2;
+count = 3;

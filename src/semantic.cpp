@@ -51,6 +51,15 @@ void SemanticAnalyzer::analyzeStatement(const Stmt* statement) {
     if(auto r=dynamic_cast<const ReturnStmt*>(statement)) { if(!insideFunction) throw std::runtime_error("'return' outside a function"); analyzeExpression(r->value.get()); if(currentReturnType==ValueType::UNKNOWN) currentReturnType=r->value->type; else if(currentReturnType!=r->value->type) throw std::runtime_error("Function has inconsistent return types: "+currentFunction); return; }
     if(auto v=dynamic_cast<const VarDeclStmt*>(statement)) { analyzeExpression(v->initializer.get()); variables[v->name]=v->initializer->type; return; }
     if(auto a=dynamic_cast<const AssignmentStmt*>(statement)) { auto it=variables.find(a->name); if(it==variables.end()) throw std::runtime_error("Assignment to undefined variable: "+a->name); analyzeExpression(a->value.get()); if(it->second!=ValueType::UNKNOWN && a->value->type!=it->second) throw std::runtime_error("Assignment changes variable type: "+a->name); it->second=a->value->type; return; }
+    if (auto watch = dynamic_cast<const WatchStmt*>(statement)) {
+        if (insideFunction) throw std::runtime_error("'watch' is currently only supported at top level");
+        if (!variables.count(watch->variable))
+            throw std::runtime_error("Cannot watch undefined variable: " + watch->variable);
+        auto savedVariables = variables;
+        for (const auto& child : watch->body) analyzeStatement(child.get());
+        variables = std::move(savedVariables);
+        return;
+    }
     if(auto p=dynamic_cast<const PrintStmt*>(statement)) { analyzeExpression(p->expression.get()); return; }
     if(auto e=dynamic_cast<const ExprStmt*>(statement)) { analyzeExpression(e->expression.get()); return; }
     if(auto i=dynamic_cast<const IfStmt*>(statement)) { analyzeExpression(i->condition.get()); if(i->condition->type!=ValueType::BOOL) throw std::runtime_error("If condition must be boolean"); for(auto& s:i->thenBranch) analyzeStatement(s.get()); for(auto& s:i->elseBranch) analyzeStatement(s.get()); return; }

@@ -133,6 +133,15 @@ struct ExprStmt : Stmt {
         : expression(std::move(expression)) {}
 };
 
+
+struct WatchStmt : Stmt {
+    std::string variable;
+    std::vector<std::unique_ptr<Stmt>> body;
+
+    WatchStmt(std::string variable, std::vector<std::unique_ptr<Stmt>> body)
+        : variable(std::move(variable)), body(std::move(body)) {}
+};
+
 struct PrintStmt : Stmt {
     std::unique_ptr<Expr> expression;
 
