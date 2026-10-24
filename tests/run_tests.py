@@ -21,6 +21,8 @@ EXPECTED_OUTPUTS = {
         "2\n"
         "loop complete\n"
     ),
+    "functions.mead": "5\n25\n30\n",
+    "string_interpolation.mead": "Count: 3\n2 + 3 = 5\nActive: true\nNo placeholders here\n",
 }
 
 INVALID_TESTS = {

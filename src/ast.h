@@ -35,6 +35,20 @@ struct StringExpr : Expr {
     }
 };
 
+struct InterpolatedStringPart {
+    std::string text;
+    std::unique_ptr<Expr> expression;
+};
+
+struct InterpolatedStringExpr : Expr {
+    std::vector<InterpolatedStringPart> parts;
+
+    explicit InterpolatedStringExpr(std::vector<InterpolatedStringPart> parts)
+        : parts(std::move(parts)) {
+        type = ValueType::STRING;
+    }
+};
+
 struct FloatExpr : Expr {
     double value;
 

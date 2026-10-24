@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "lexer.h"
 #include <stdexcept>
 #include <string>
 
@@ -33,7 +34,46 @@ std::unique_ptr<Expr> Parser::parseLogicalOr() {
 }
 std::unique_ptr<Expr> Parser::parsePrimary() {
     if (check(TokenType::INTEGER)) return std::make_unique<IntegerExpr>(std::stoi(advance().value));
-    if (check(TokenType::STRING)) return std::make_unique<StringExpr>(advance().value);
+    if (check(TokenType::STRING)) {
+        const std::string value = advance().value;
+        std::vector<InterpolatedStringPart> parts;
+        size_t cursor = 0;
+        bool hasInterpolation = false;
+
+        while (cursor < value.size()) {
+            const size_t start = value.find("${", cursor);
+            if (start == std::string::npos) {
+                if (cursor < value.size())
+                    parts.push_back({value.substr(cursor), nullptr});
+                break;
+            }
+
+            hasInterpolation = true;
+            if (start > cursor)
+                parts.push_back({value.substr(cursor, start - cursor), nullptr});
+
+            const size_t end = value.find('}', start + 2);
+            if (end == std::string::npos)
+                throw std::runtime_error("Unterminated string interpolation; expected '}'");
+
+            const std::string embedded = value.substr(start + 2, end - (start + 2));
+            if (embedded.find_first_not_of(" \t\r\n") == std::string::npos)
+                throw std::runtime_error("String interpolation cannot be empty");
+
+            Lexer embeddedLexer(embedded);
+            auto embeddedTokens = embeddedLexer.tokenize();
+            Parser embeddedParser(embeddedTokens);
+            auto expression = embeddedParser.parseExpressionOnly();
+            parts.push_back({"", std::move(expression)});
+            cursor = end + 1;
+        }
+
+        if (!hasInterpolation)
+            return std::make_unique<StringExpr>(value);
+        if (value.empty())
+            parts.push_back({"", nullptr});
+        return std::make_unique<InterpolatedStringExpr>(std::move(parts));
+    }
     if (check(TokenType::FLOAT)) return std::make_unique<FloatExpr>(std::stod(advance().value));
     if (check(TokenType::BOOL)) return std::make_unique<BoolExpr>(advance().value == "true");
     if (check(TokenType::IDENTIFIER)) {
@@ -98,6 +138,11 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
     throw std::runtime_error("Expected statement");
 }
 std::vector<std::unique_ptr<Stmt>> Parser::parse() { std::vector<std::unique_ptr<Stmt>> out; while (!check(TokenType::END_OF_FILE)) out.push_back(parseStatement()); return out; }
+std::unique_ptr<Expr> Parser::parseExpressionOnly() {
+    auto expression = parseExpression();
+    consume(TokenType::END_OF_FILE, "Unexpected token in string interpolation");
+    return expression;
+}
 std::vector<std::unique_ptr<Stmt>> Parser::parseBlock() {
     consume(TokenType::LBRACE, "Expected '{'"); std::vector<std::unique_ptr<Stmt>> out;
     while (!check(TokenType::RBRACE) && !check(TokenType::END_OF_FILE)) out.push_back(parseStatement());

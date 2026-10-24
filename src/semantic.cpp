@@ -3,6 +3,16 @@
 
 void SemanticAnalyzer::analyzeExpression(const Expr* expression) {
     if (dynamic_cast<const FloatExpr*>(expression) || dynamic_cast<const IntegerExpr*>(expression) || dynamic_cast<const BoolExpr*>(expression) || dynamic_cast<const StringExpr*>(expression)) return;
+    if (auto interpolated = dynamic_cast<const InterpolatedStringExpr*>(expression)) {
+        for (const auto& part : interpolated->parts) {
+            if (!part.expression) continue;
+            analyzeExpression(part.expression.get());
+            if (part.expression->type != ValueType::INT && part.expression->type != ValueType::BOOL && part.expression->type != ValueType::UNKNOWN)
+                throw std::runtime_error("String interpolation currently supports integer and boolean expressions");
+        }
+        const_cast<InterpolatedStringExpr*>(interpolated)->type = ValueType::STRING;
+        return;
+    }
     if (auto v = dynamic_cast<const VariableExpr*>(expression)) {
         auto it = variables.find(v->name); if (it == variables.end()) throw std::runtime_error("Undefined variable: " + v->name);
         const_cast<VariableExpr*>(v)->type = it->second; return;
