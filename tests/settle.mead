@@ -1,0 +1,9 @@
+var a = 0;
+settle max 10 {
+    if (a < 3) {
+        a = a + 1;
+    }
+} else {
+    panic("Did not settle");
+}
+print(a);

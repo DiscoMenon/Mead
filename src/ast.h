@@ -9,11 +9,13 @@ enum class ValueType {
     FLOAT,
     BOOL,
     STRING,
-    UNKNOWN
+    UNKNOWN,
+    UNIT
 };
 
 struct Expr {
     ValueType type = ValueType::UNKNOWN;
+    std::string dimension;
     virtual ~Expr() = default;
 };
 
@@ -56,6 +58,14 @@ struct FloatExpr : Expr {
         : value(value) {
         type = ValueType::FLOAT;
     }
+};
+
+struct UnitExpr : Expr {
+    std::unique_ptr<Expr> value;
+    std::string unit;
+    long long scale;
+    UnitExpr(std::unique_ptr<Expr> value, std::string unit, long long scale, std::string dimension)
+        : Expr(), value(std::move(value)), unit(std::move(unit)), scale(scale) { this->dimension = std::move(dimension); type = ValueType::UNIT; }
 };
 
 struct BoolExpr : Expr {
@@ -140,6 +150,14 @@ struct WatchStmt : Stmt {
 
     WatchStmt(std::string variable, std::vector<std::unique_ptr<Stmt>> body)
         : variable(std::move(variable)), body(std::move(body)) {}
+};
+
+struct SettleStmt : Stmt {
+    int maxIterations;
+    std::vector<std::unique_ptr<Stmt>> body;
+    std::vector<std::unique_ptr<Stmt>> elseBranch;
+    SettleStmt(int maxIterations, std::vector<std::unique_ptr<Stmt>> body, std::vector<std::unique_ptr<Stmt>> elseBranch)
+        : maxIterations(maxIterations), body(std::move(body)), elseBranch(std::move(elseBranch)) {}
 };
 
 struct PrintStmt : Stmt {

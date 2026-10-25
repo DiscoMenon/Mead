@@ -17,11 +17,13 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
     emitFunction = [&](const std::vector<std::unique_ptr<Stmt>>& body, const std::string& functionName, const std::vector<std::string>& params, bool isMain) {
         std::unordered_map<std::string,int> slots; int slotCount=0;
         std::vector<const WatchStmt*> watchers;
+        std::unordered_map<const SettleStmt*, std::string> settleIds;
         for(const auto& p:params) slots[p]=++slotCount;
         std::function<void(const Stmt*)> collect=[&](const Stmt* s){
             if(auto v=dynamic_cast<const VarDeclStmt*>(s)){ if(!slots.count(v->name)) slots[v->name]=++slotCount; }
             else if(auto i=dynamic_cast<const IfStmt*>(s)){ for(auto& x:i->thenBranch) collect(x.get()); for(auto& x:i->elseBranch) collect(x.get()); }
             else if(auto w=dynamic_cast<const WhileStmt*>(s)){ for(auto& x:w->body) collect(x.get()); }
+            else if(auto st=dynamic_cast<const SettleStmt*>(s)){ std::string suffix=std::to_string(labelCount++); settleIds[st]=suffix; slots["__settle_flag_"+suffix]=++slotCount; slots["__settle_count_"+suffix]=++slotCount; for(auto& x:st->body) collect(x.get()); for(auto& x:st->elseBranch) collect(x.get()); }
             else if(auto w=dynamic_cast<const WatchStmt*>(s)){
                 const std::string snapshot = "__watch_snapshot_" + std::to_string(watchers.size());
                 if (!slots.count(snapshot)) slots[snapshot] = ++slotCount;
@@ -39,6 +41,7 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
         std::function<void(const Stmt*)> emitStmt;
         std::function<void(const std::string&)> emitWatchTriggers;
         bool emittingWatchBody = false;
+        std::vector<std::string> activeSettleFlags;
         int stackDepth = 0;
         auto emitWriteBytes = [&](const std::string& text) {
             if (text.empty()) return;
@@ -58,8 +61,16 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
         emitExpr=[&](const Expr* e){
             if(auto n=dynamic_cast<const IntegerExpr*>(e)) code<<"    mov rax, "<<n->value<<"\n";
             else if(auto b=dynamic_cast<const BoolExpr*>(e)) code<<"    mov rax, "<<(b->value?1:0)<<"\n";
+            else if(auto u=dynamic_cast<const UnitExpr*>(e)) { emitExpr(u->value.get()); if (u->scale != 1) code << "    imul rax, " << u->scale << "\n"; }
             else if(auto v=dynamic_cast<const VariableExpr*>(e)) code<<"    mov rax, QWORD PTR [rbp-"<<slot(v->name)<<"]\n";
             else if(auto call=dynamic_cast<const CallExpr*>(e)){
+                if (call->name == "panic") {
+                    auto message = dynamic_cast<const StringExpr*>(call->arguments[0].get());
+                    if (!message) throw std::runtime_error("panic expects a string literal");
+                    emitWriteBytes(message->value + "\r\n");
+                    code << "    mov ecx, 1\n    call ExitProcess\n";
+                    return;
+                }
                 if(call->arguments.size()>4) throw std::runtime_error("Mead functions currently support at most 4 parameters");
                 for(const auto& a:call->arguments){ emitExpr(a.get()); code<<"    push rax\n"; ++stackDepth; }
                 const char* regs[]={"rcx","rdx","r8","r9"};
@@ -94,14 +105,39 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
             else if(auto v=dynamic_cast<const VarDeclStmt*>(s)){ emitExpr(v->initializer.get()); code<<"    mov QWORD PTR [rbp-"<<slot(v->name)<<"], rax\n"; }
             else if(auto a=dynamic_cast<const AssignmentStmt*>(s)){
                 emitExpr(a->value.get());
-                code << "    mov QWORD PTR [rbp-" << slot(a->name) << "], rax\n";
-                if (!emittingWatchBody && emitWatchTriggers) emitWatchTriggers(a->name);
+                if (!activeSettleFlags.empty()) {
+                    const int id = labelCount++;
+                    const std::string same = "mead_settle_same_" + std::to_string(id);
+                    code << "    cmp rax, QWORD PTR [rbp-" << slot(a->name) << "]\n    je " << same << "\n"
+                         << "    mov QWORD PTR [rbp-" << slot(a->name) << "], rax\n"
+                         << "    mov QWORD PTR [rbp-" << slot(activeSettleFlags.back()) << "], 1\n"
+                         << same << ":\n";
+                } else {
+                    code << "    mov QWORD PTR [rbp-" << slot(a->name) << "], rax\n";
+                    if (!emittingWatchBody && emitWatchTriggers) emitWatchTriggers(a->name);
+                }
             }
             else if(auto watch=dynamic_cast<const WatchStmt*>(s)){
                 auto it = std::find(watchers.begin(), watchers.end(), watch);
                 const int index = static_cast<int>(std::distance(watchers.begin(), it));
                 code << "    mov rax, QWORD PTR [rbp-" << slot(watch->variable) << "]\n"
                      << "    mov QWORD PTR [rbp-" << slot("__watch_snapshot_" + std::to_string(index)) << "], rax\n";
+            }
+            else if(auto st=dynamic_cast<const SettleStmt*>(s)) {
+                const std::string suffix = settleIds.at(st);
+                const std::string flag = "__settle_flag_" + suffix, count = "__settle_count_" + suffix;
+                const std::string start = "mead_settle_start_" + suffix, success = "mead_settle_success_" + suffix, failure = "mead_settle_failure_" + suffix, done = "mead_settle_done_" + suffix;
+                code << "    mov QWORD PTR [rbp-" << slot(count) << "], " << st->maxIterations << "\n" << start << ":\n"
+                     << "    mov QWORD PTR [rbp-" << slot(flag) << "], 0\n";
+                activeSettleFlags.push_back(flag);
+                for (const auto& child : st->body) emitStmt(child.get());
+                activeSettleFlags.pop_back();
+                code << "    cmp QWORD PTR [rbp-" << slot(flag) << "], 0\n    je " << success << "\n"
+                     << "    sub QWORD PTR [rbp-" << slot(count) << "], 1\n"
+                     << "    cmp QWORD PTR [rbp-" << slot(count) << "], 0\n    je " << failure << "\n"
+                     << "    jmp " << start << "\n" << success << ":\n    jmp " << done << "\n" << failure << ":\n";
+                for (const auto& child : st->elseBranch) emitStmt(child.get());
+                code << done << ":\n";
             }
             else if(auto p=dynamic_cast<const PrintStmt*>(s)){
                 if(auto str=dynamic_cast<const StringExpr*>(p->expression.get())) {

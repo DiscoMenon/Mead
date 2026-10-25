@@ -3,6 +3,13 @@
 
 void SemanticAnalyzer::analyzeExpression(const Expr* expression) {
     if (dynamic_cast<const FloatExpr*>(expression) || dynamic_cast<const IntegerExpr*>(expression) || dynamic_cast<const BoolExpr*>(expression) || dynamic_cast<const StringExpr*>(expression)) return;
+    if (auto unit = dynamic_cast<const UnitExpr*>(expression)) {
+        analyzeExpression(unit->value.get());
+        if (unit->value->type != ValueType::INT && unit->value->type != ValueType::FLOAT)
+            throw std::runtime_error("Unit suffix requires a numeric value");
+        const_cast<UnitExpr*>(unit)->type = ValueType::UNIT;
+        return;
+    }
     if (auto interpolated = dynamic_cast<const InterpolatedStringExpr*>(expression)) {
         for (const auto& part : interpolated->parts) {
             if (!part.expression) continue;
@@ -15,9 +22,15 @@ void SemanticAnalyzer::analyzeExpression(const Expr* expression) {
     }
     if (auto v = dynamic_cast<const VariableExpr*>(expression)) {
         auto it = variables.find(v->name); if (it == variables.end()) throw std::runtime_error("Undefined variable: " + v->name);
-        const_cast<VariableExpr*>(v)->type = it->second; return;
+        const_cast<VariableExpr*>(v)->type = it->second; const_cast<VariableExpr*>(v)->dimension = dimensions[v->name]; return;
     }
     if (auto call = dynamic_cast<const CallExpr*>(expression)) {
+        if (call->name == "panic") {
+            if (call->arguments.size() != 1 || !dynamic_cast<const StringExpr*>(call->arguments[0].get()))
+                throw std::runtime_error("panic expects one string literal");
+            const_cast<CallExpr*>(call)->type = ValueType::UNKNOWN;
+            return;
+        }
         auto it = functions.find(call->name); if (it == functions.end()) throw std::runtime_error("Undefined function: " + call->name);
         if (call->arguments.size() != it->second.parameterTypes.size()) throw std::runtime_error("Wrong number of arguments for: " + call->name);
         for (size_t i = 0; i < call->arguments.size(); ++i) {
@@ -30,8 +43,24 @@ void SemanticAnalyzer::analyzeExpression(const Expr* expression) {
     }
     if (auto b = dynamic_cast<const BinaryExpr*>(expression)) {
         analyzeExpression(b->left.get()); analyzeExpression(b->right.get()); auto l=b->left->type, r=b->right->type;
+        const std::string ld = b->left->dimension, rd = b->right->dimension;
         if (b->op=="&&" || b->op=="||") { if(l!=ValueType::BOOL || r!=ValueType::BOOL) throw std::runtime_error("Logical operators require boolean operands"); const_cast<BinaryExpr*>(b)->type=ValueType::BOOL; return; }
-        if (b->op=="==" || b->op=="!=" || b->op=="<" || b->op=="<=" || b->op==">" || b->op==">=") { bool numeric=(l==ValueType::INT||l==ValueType::FLOAT)&&(r==ValueType::INT||r==ValueType::FLOAT); bool same=l==r && l!=ValueType::UNKNOWN; if(!numeric && !((b->op=="=="||b->op=="!=")&&same)) throw std::runtime_error("Invalid types for comparison"); const_cast<BinaryExpr*>(b)->type=ValueType::BOOL; return; }
+        if (b->op=="==" || b->op=="!=" || b->op=="<" || b->op=="<=" || b->op==">" || b->op==">=") { if (ld != rd) throw std::runtime_error("Cannot compare values with incompatible dimensions"); bool numeric=(l==ValueType::INT||l==ValueType::FLOAT)&&(r==ValueType::INT||r==ValueType::FLOAT); bool same=l==r && l!=ValueType::UNKNOWN; if(!numeric && !((b->op=="=="||b->op=="!=")&&same)) throw std::runtime_error("Invalid types for comparison"); const_cast<BinaryExpr*>(b)->type=ValueType::BOOL; return; }
+        if (l==ValueType::UNIT || r==ValueType::UNIT) {
+            if (b->op == "+" || b->op == "-") {
+                if (ld != rd) throw std::runtime_error("Cannot add or subtract incompatible dimensions");
+                const_cast<BinaryExpr*>(b)->type = ValueType::UNIT; const_cast<BinaryExpr*>(b)->dimension = ld; return;
+            }
+            if (b->op == "*" || b->op == "/") {
+                std::string dim;
+                if (b->op == "*") dim = ld + "*" + rd;
+                else dim = ld + "/" + rd;
+                if (ld.empty()) dim = rd; if (rd.empty()) dim = ld;
+                const_cast<BinaryExpr*>(b)->type = dim.empty() ? ValueType::INT : ValueType::UNIT;
+                const_cast<BinaryExpr*>(b)->dimension = dim; return;
+            }
+            throw std::runtime_error("Unsupported operator for unit-aware values");
+        }
         if (l==ValueType::INT && r==ValueType::INT) { const_cast<BinaryExpr*>(b)->type=ValueType::INT; return; }
         if ((l==ValueType::INT||l==ValueType::FLOAT)&&(r==ValueType::INT||r==ValueType::FLOAT)) { const_cast<BinaryExpr*>(b)->type=ValueType::FLOAT; return; }
         throw std::runtime_error("Incompatible or uninferred types in binary expression");
@@ -49,8 +78,8 @@ void SemanticAnalyzer::analyzeStatement(const Stmt* statement) {
         variables=std::move(savedVars); insideFunction=savedInside; currentReturnType=savedReturn; currentFunction=savedName; return;
     }
     if(auto r=dynamic_cast<const ReturnStmt*>(statement)) { if(!insideFunction) throw std::runtime_error("'return' outside a function"); analyzeExpression(r->value.get()); if(currentReturnType==ValueType::UNKNOWN) currentReturnType=r->value->type; else if(currentReturnType!=r->value->type) throw std::runtime_error("Function has inconsistent return types: "+currentFunction); return; }
-    if(auto v=dynamic_cast<const VarDeclStmt*>(statement)) { analyzeExpression(v->initializer.get()); variables[v->name]=v->initializer->type; return; }
-    if(auto a=dynamic_cast<const AssignmentStmt*>(statement)) { auto it=variables.find(a->name); if(it==variables.end()) throw std::runtime_error("Assignment to undefined variable: "+a->name); analyzeExpression(a->value.get()); if(it->second!=ValueType::UNKNOWN && a->value->type!=it->second) throw std::runtime_error("Assignment changes variable type: "+a->name); it->second=a->value->type; return; }
+    if(auto v=dynamic_cast<const VarDeclStmt*>(statement)) { analyzeExpression(v->initializer.get()); variables[v->name]=v->initializer->type; dimensions[v->name]=v->initializer->dimension; return; }
+    if(auto a=dynamic_cast<const AssignmentStmt*>(statement)) { auto it=variables.find(a->name); if(it==variables.end()) throw std::runtime_error("Assignment to undefined variable: "+a->name); analyzeExpression(a->value.get()); if(it->second!=ValueType::UNKNOWN && a->value->type!=it->second) throw std::runtime_error("Assignment changes variable type: "+a->name); if (dimensions[a->name] != a->value->dimension) throw std::runtime_error("Assignment changes variable dimension: " + a->name); it->second=a->value->type; return; }
     if (auto watch = dynamic_cast<const WatchStmt*>(statement)) {
         if (insideFunction) throw std::runtime_error("'watch' is currently only supported at top level");
         if (!variables.count(watch->variable))
@@ -60,13 +89,14 @@ void SemanticAnalyzer::analyzeStatement(const Stmt* statement) {
         variables = std::move(savedVariables);
         return;
     }
+    if (auto settle = dynamic_cast<const SettleStmt*>(statement)) { auto saved = variables; auto savedDims = dimensions; for (const auto& child : settle->body) analyzeStatement(child.get()); variables = saved; dimensions = savedDims; for (const auto& child : settle->elseBranch) analyzeStatement(child.get()); variables = saved; dimensions = savedDims; return; }
     if(auto p=dynamic_cast<const PrintStmt*>(statement)) { analyzeExpression(p->expression.get()); return; }
     if(auto e=dynamic_cast<const ExprStmt*>(statement)) { analyzeExpression(e->expression.get()); return; }
     if(auto i=dynamic_cast<const IfStmt*>(statement)) { analyzeExpression(i->condition.get()); if(i->condition->type!=ValueType::BOOL) throw std::runtime_error("If condition must be boolean"); for(auto& s:i->thenBranch) analyzeStatement(s.get()); for(auto& s:i->elseBranch) analyzeStatement(s.get()); return; }
     if(auto w=dynamic_cast<const WhileStmt*>(statement)) { analyzeExpression(w->condition.get()); if(w->condition->type!=ValueType::BOOL) throw std::runtime_error("While condition must be boolean"); for(auto& s:w->body) analyzeStatement(s.get()); }
 }
 void SemanticAnalyzer::analyze(const std::vector<std::unique_ptr<Stmt>>& statements) {
-    functions.clear(); variables.clear();
+    functions.clear(); variables.clear(); dimensions.clear();
     for (const auto& s : statements) {
         if (auto f = dynamic_cast<const FunctionStmt*>(s.get())) {
             if (functions.count(f->name)) throw std::runtime_error("Duplicate function: " + f->name);
@@ -79,7 +109,7 @@ void SemanticAnalyzer::analyze(const std::vector<std::unique_ptr<Stmt>>& stateme
     // Each pass rechecks top-level calls, then analyzes functions whose parameter
     // types are known. This supports common nesting such as square(add(2, 3)).
     for (int pass = 0; pass < 4; ++pass) {
-        variables.clear();
+        variables.clear(); dimensions.clear();
         for (const auto& s : statements)
             if (!dynamic_cast<const FunctionStmt*>(s.get())) analyzeStatement(s.get());
 
@@ -99,7 +129,7 @@ void SemanticAnalyzer::analyze(const std::vector<std::unique_ptr<Stmt>>& stateme
     }
 
     // Final top-level validation after return types have been inferred.
-    variables.clear();
+    variables.clear(); dimensions.clear();
     for (const auto& s : statements)
         if (!dynamic_cast<const FunctionStmt*>(s.get())) analyzeStatement(s.get());
 

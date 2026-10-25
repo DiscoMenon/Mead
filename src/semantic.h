@@ -7,6 +7,7 @@
 class SemanticAnalyzer {
 private:
     std::unordered_map<std::string, ValueType> variables;
+    std::unordered_map<std::string, std::string> dimensions;
     struct FunctionInfo { std::vector<ValueType> parameterTypes; ValueType returnType = ValueType::UNKNOWN; };
     std::unordered_map<std::string, FunctionInfo> functions;
     ValueType currentReturnType = ValueType::UNKNOWN;

@@ -1,0 +1,6 @@
+var distance = 500.m + 2.km;
+var time = 30.s + 2.min;
+var speed = distance / time;
+print(distance);
+print(time);
+print(speed);

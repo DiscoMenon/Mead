@@ -33,7 +33,25 @@ std::unique_ptr<Expr> Parser::parseLogicalOr() {
     return expression;
 }
 std::unique_ptr<Expr> Parser::parsePrimary() {
-    if (check(TokenType::INTEGER)) return std::make_unique<IntegerExpr>(std::stoi(advance().value));
+    if (check(TokenType::INTEGER) || check(TokenType::FLOAT)) {
+        const bool isFloat = check(TokenType::FLOAT);
+        const std::string number = advance().value;
+        std::unique_ptr<Expr> value = isFloat
+            ? std::unique_ptr<Expr>(std::make_unique<FloatExpr>(std::stod(number)))
+            : std::unique_ptr<Expr>(std::make_unique<IntegerExpr>(std::stoi(number)));
+        if (check(TokenType::DOT) && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENTIFIER) {
+            advance(); const std::string unit = advance().value;
+            long long scale = 1; std::string dimension;
+            if (unit == "m") dimension = "L";
+            else if (unit == "km") { dimension = "L"; scale = 1000; }
+            else if (unit == "s") dimension = "T";
+            else if (unit == "min") { dimension = "T"; scale = 60; }
+            else if (unit == "h") { dimension = "T"; scale = 3600; }
+            else throw std::runtime_error("Unknown unit: " + unit + " (supported: m, km, s, min, h)");
+            return std::make_unique<UnitExpr>(std::move(value), unit, scale, dimension);
+        }
+        return value;
+    }
     if (check(TokenType::STRING)) {
         const std::string value = advance().value;
         std::vector<InterpolatedStringPart> parts;
@@ -127,6 +145,17 @@ std::unique_ptr<Stmt> Parser::parseWatch() {
     auto body = parseBlock();
     return std::make_unique<WatchStmt>(variable.value, std::move(body));
 }
+std::unique_ptr<Stmt> Parser::parseSettle() {
+    advance();
+    consume(TokenType::IDENTIFIER, "Expected 'max' after 'settle'");
+    const auto limit = consume(TokenType::INTEGER, "Expected iteration limit after 'settle max'");
+    int maxIterations = std::stoi(limit.value);
+    if (maxIterations <= 0) throw std::runtime_error("settle max must be positive");
+    auto body = parseBlock();
+    std::vector<std::unique_ptr<Stmt>> otherwise;
+    if (check(TokenType::ELSE)) { advance(); otherwise = parseBlock(); }
+    return std::make_unique<SettleStmt>(maxIterations, std::move(body), std::move(otherwise));
+}
 std::unique_ptr<Stmt> Parser::parseReturn() {
     advance(); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after return"); return std::make_unique<ReturnStmt>(std::move(value));
 }
@@ -134,6 +163,7 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
     if (check(TokenType::FUNC)) return parseFunction();
     if (check(TokenType::RETURN)) return parseReturn();
     if (check(TokenType::WATCH)) return parseWatch();
+    if (check(TokenType::SETTLE)) return parseSettle();
     if (check(TokenType::PRINT)) return parsePrint();
     if (check(TokenType::IF)) return parseIf();
     if (check(TokenType::WHILE)) return parseWhile();

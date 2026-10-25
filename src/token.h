@@ -12,6 +12,7 @@ enum class TokenType {
     FUNC,
     RETURN,
     WATCH,
+    SETTLE,
 
     // Literals
     INTEGER,

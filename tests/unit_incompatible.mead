@@ -1,0 +1,3 @@
+var distance = 5.m;
+var duration = 2.s;
+var invalid = distance + duration;
