@@ -1,15 +1,14 @@
-var x = 10;
-var y = 20;
+print("=== Variables, Types & Arithmetic ===");
+var base = 10;
+var multiplier = 3;
+var total = base * multiplier + 2;
+print(total);
 
-print("Arithmetic:");
-print(x + y);
-print(x * y);
-print(x - y);
-
-if (x < y) {
-    print("x is smaller");
+print("=== Control Flow ===");
+if (total > 20) {
+    print("condition: true");
 } else {
-    print("unexpected");
+    print("condition: false");
 }
 
 var i = 0;
@@ -17,3 +16,42 @@ while (i < 3) {
     print(i);
     i = i + 1;
 }
+
+print("=== Functions ===");
+var answer = multiply(6, 7);
+print(answer);
+
+func multiply(a,b) {
+    return a * b;
+}
+
+print("=== String Interpolation ===");
+var user = "Mead";
+print("Hello, ${user}!");
+print("6 * 7 = ${multiply(6, 7)}");
+
+print("=== Unit-Aware Types ===");
+var distance = 500.m + 2.km;
+var duration = 30.s + 2.min;
+print(distance);
+print(duration);
+
+print("=== Watch Blocks ===");
+var count = 0;
+watch count {
+    print(count);
+}
+count = 1;
+count = 2;
+
+print("=== Settle Loops ===");
+var value = 0;
+settle max 10 {
+    if (value < 3) {
+        value = value + 1;
+    }
+} else {
+    panic("settle did not finish");
+}
+print(value);
+

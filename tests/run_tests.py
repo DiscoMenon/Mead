@@ -23,6 +23,7 @@ EXPECTED_OUTPUTS = {
     ),
     "functions.mead": "5\n25\n30\n",
     "string_interpolation.mead": "Count: 3\n2 + 3 = 5\nActive: true\nNo placeholders here\n",
+    "string_variables.mead": "Mead\nCompiler\nHello, Compiler!\n",
     "watch.mead": "count changed to 2\ncount changed to 3\n",
     "unit_aware_types.mead": "2500\n150\n16\n",
     "settle.mead": "3\n",
@@ -55,9 +56,9 @@ def run(command, cwd=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--compiler", required=True)
-    parser.add_argument("--source-dir", required=True)
-    parser.add_argument("--work-dir", required=True)
+    parser.add_argument("--compiler", default="build/Debug/meadc.exe")
+    parser.add_argument("--source-dir", default="tests")
+    parser.add_argument("--work-dir", default="build/test-work")
     args = parser.parse_args()
 
     compiler = Path(args.compiler).resolve()

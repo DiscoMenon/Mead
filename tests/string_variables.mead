@@ -1,0 +1,5 @@
+var user = "Mead";
+print(user);
+user = "Compiler";
+print(user);
+print("Hello, ${user}!");

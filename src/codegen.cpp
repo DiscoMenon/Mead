@@ -43,18 +43,41 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
         bool emittingWatchBody = false;
         std::vector<std::string> activeSettleFlags;
         int stackDepth = 0;
-        auto emitWriteBytes = [&](const std::string& text) {
-            if (text.empty()) return;
+        auto emitStringData = [&](const std::string& text) {
             std::string label = "mead_string_" + std::to_string(stringCount++);
             data << label << " BYTE ";
             for (size_t i = 0; i < text.size(); ++i) {
                 if (i) data << ", ";
                 data << static_cast<unsigned int>(static_cast<unsigned char>(text[i]));
             }
-            data << "\n";
+            if (!text.empty()) data << ", ";
+            data << "0\n";
+            return label;
+        };
+        auto emitWriteBytes = [&](const std::string& text) {
+            if (text.empty()) return;
+            std::string label = emitStringData(text);
             code << "    mov ecx, -11\n    call GetStdHandle\n"
                  << "    mov rcx, rax\n    lea rdx, " << label << "\n"
                  << "    mov r8d, " << text.size() << "\n"
+                 << "    lea r9, mead_written\n"
+                 << "    mov QWORD PTR [rsp+20h], 0\n    call WriteFile\n";
+        };
+        auto emitWriteStringPointer = [&]() {
+            const int pointerScratch = (slotCount + 1) * 8;
+            const int lengthScratch = (slotCount + 2) * 8;
+            const std::string loop = "mead_string_len_loop_" + std::to_string(labelCount++);
+            const std::string done = "mead_string_len_done_" + std::to_string(labelCount++);
+            code << "    mov QWORD PTR [rbp-" << pointerScratch << "], rax\n"
+                 << "    xor r8d, r8d\n" << loop << ":\n"
+                 << "    mov r10, QWORD PTR [rbp-" << pointerScratch << "]\n"
+                 << "    cmp BYTE PTR [r10+r8], 0\n    je " << done << "\n"
+                 << "    inc r8d\n    jmp " << loop << "\n" << done << ":\n"
+                 << "    mov QWORD PTR [rbp-" << lengthScratch << "], r8\n"
+                 << "    mov ecx, -11\n    call GetStdHandle\n"
+                 << "    mov rcx, rax\n"
+                 << "    mov rdx, QWORD PTR [rbp-" << pointerScratch << "]\n"
+                 << "    mov r8d, DWORD PTR [rbp-" << lengthScratch << "]\n"
                  << "    lea r9, mead_written\n"
                  << "    mov QWORD PTR [rsp+20h], 0\n    call WriteFile\n";
         };
@@ -63,6 +86,10 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
             else if(auto b=dynamic_cast<const BoolExpr*>(e)) code<<"    mov rax, "<<(b->value?1:0)<<"\n";
             else if(auto u=dynamic_cast<const UnitExpr*>(e)) { emitExpr(u->value.get()); if (u->scale != 1) code << "    imul rax, " << u->scale << "\n"; }
             else if(auto v=dynamic_cast<const VariableExpr*>(e)) code<<"    mov rax, QWORD PTR [rbp-"<<slot(v->name)<<"]\n";
+            else if(auto str=dynamic_cast<const StringExpr*>(e)) {
+                const std::string label = emitStringData(str->value);
+                code << "    lea rax, " << label << "\n";
+            }
             else if(auto call=dynamic_cast<const CallExpr*>(e)){
                 if (call->name == "panic") {
                     auto message = dynamic_cast<const StringExpr*>(call->arguments[0].get());
@@ -95,7 +122,7 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
                 else throw std::runtime_error("Unsupported operator: "+op);
             } else if(dynamic_cast<const InterpolatedStringExpr*>(e)) {
                 throw std::runtime_error("Interpolated strings are currently supported in print statements only");
-            } else if(dynamic_cast<const FloatExpr*>(e)||dynamic_cast<const StringExpr*>(e)) throw std::runtime_error("Float/string expressions are not supported in generated arithmetic or calls yet.");
+            } else if(dynamic_cast<const FloatExpr*>(e)) throw std::runtime_error("Float expressions are not supported in generated arithmetic or calls yet.");
             else throw std::runtime_error("Unsupported expression in code generation");
         };
         emitStmt=[&](const Stmt* s){
@@ -160,10 +187,16 @@ std::string CodeGenerator::generate(const std::vector<std::unique_ptr<Stmt>>& st
                             code << "    jmp " << endLabel << "\n" << falseLabel << ":\n";
                             emitWriteBytes("false");
                             code << endLabel << ":\n";
+                        } else if (part.expression->type == ValueType::STRING) {
+                            emitWriteStringPointer();
                         } else {
                             throw std::runtime_error("String interpolation currently supports integer and boolean expressions");
                         }
                     }
+                    emitWriteBytes("\r\n");
+                } else if (p->expression->type == ValueType::STRING) {
+                    emitExpr(p->expression.get());
+                    emitWriteStringPointer();
                     emitWriteBytes("\r\n");
                 } else {
                     emitExpr(p->expression.get());

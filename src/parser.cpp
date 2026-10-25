@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "lexer.h"
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -96,18 +97,24 @@ std::unique_ptr<Expr> Parser::parsePrimary() {
     if (check(TokenType::BOOL)) return std::make_unique<BoolExpr>(advance().value == "true");
     if (check(TokenType::IDENTIFIER)) {
         std::string name = advance().value;
-        if (!check(TokenType::LPAREN)) return std::make_unique<VariableExpr>(name);
-        advance();
-        std::vector<std::unique_ptr<Expr>> args;
-        if (!check(TokenType::RPAREN)) {
-            do {
-                args.push_back(parseExpression());
-                if (!check(TokenType::COMMA)) break;
-                advance();
-            } while (true);
+
+        if (check(TokenType::LPAREN)) {
+            advance();
+            std::vector<std::unique_ptr<Expr>> args;
+
+            if (!check(TokenType::RPAREN)) {
+                do {
+                    args.push_back(parseExpression());
+                    if (!check(TokenType::COMMA)) break;
+                    advance();
+                } while (true);
+            }
+
+            consume(TokenType::RPAREN, "Expected ')' after function arguments");
+            return std::make_unique<CallExpr>(name, std::move(args));
         }
-        consume(TokenType::RPAREN, "Expected ')' after function arguments");
-        return std::make_unique<CallExpr>(name, std::move(args));
+
+        return std::make_unique<VariableExpr>(name);
     }
     if (check(TokenType::LPAREN)) { advance(); auto e = parseExpression(); consume(TokenType::RPAREN, "Expected ')' after expression"); return e; }
     throw std::runtime_error("Expected expression");
@@ -127,7 +134,15 @@ std::unique_ptr<Stmt> Parser::parsePrint() {
     advance(); consume(TokenType::LPAREN, "Expected '(' after print"); auto e = parseExpression(); consume(TokenType::RPAREN, "Expected ')' after expression"); consume(TokenType::SEMICOLON, "Expected ';' after print statement"); return std::make_unique<PrintStmt>(std::move(e));
 }
 std::unique_ptr<Stmt> Parser::parseVarDeclaration() {
-    advance(); auto name = consume(TokenType::IDENTIFIER, "Expected variable name after 'var'"); consume(TokenType::EQUAL, "Expected '=' after variable name"); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after variable declaration"); return std::make_unique<VarDeclStmt>(name.value, std::move(value));
+    advance();
+    auto name = consume(TokenType::IDENTIFIER, "Expected variable name after 'var'");
+    consume(TokenType::EQUAL, "Expected '=' after variable name");
+    std::cerr << "Parsing variable initializer for: " << name.value
+            << ", next token: " << peek().value << '\n';
+    auto value = parseExpression();
+std::cerr << "After expression, next token: " << peek().value << '\n';
+    consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
+    return std::make_unique<VarDeclStmt>(name.value, std::move(value));
 }
 std::unique_ptr<Stmt> Parser::parseAssignment() {
     auto name = consume(TokenType::IDENTIFIER, "Expected variable name"); consume(TokenType::EQUAL, "Expected '=' in assignment"); auto value = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after assignment"); return std::make_unique<AssignmentStmt>(name.value, std::move(value));
@@ -169,8 +184,19 @@ std::unique_ptr<Stmt> Parser::parseStatement() {
     if (check(TokenType::WHILE)) return parseWhile();
     if (check(TokenType::VAR)) return parseVarDeclaration();
     if (check(TokenType::IDENTIFIER)) {
-        if (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::EQUAL) return parseAssignment();
-        auto e = parseExpression(); consume(TokenType::SEMICOLON, "Expected ';' after expression"); return std::make_unique<ExprStmt>(std::move(e));
+        if (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::EQUAL)
+            return parseAssignment();
+
+        auto e = parseExpression();
+
+        if (!check(TokenType::SEMICOLON)) {
+            throw std::runtime_error(
+                "Expected ';' after expression near token: " + peek().value
+            );
+        }
+
+        consume(TokenType::SEMICOLON, "Expected ';' after expression");
+        return std::make_unique<ExprStmt>(std::move(e));
     }
     throw std::runtime_error("Expected statement");
 }

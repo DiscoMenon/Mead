@@ -14,8 +14,9 @@ void SemanticAnalyzer::analyzeExpression(const Expr* expression) {
         for (const auto& part : interpolated->parts) {
             if (!part.expression) continue;
             analyzeExpression(part.expression.get());
-            if (part.expression->type != ValueType::INT && part.expression->type != ValueType::BOOL && part.expression->type != ValueType::UNKNOWN)
-                throw std::runtime_error("String interpolation currently supports integer and boolean expressions");
+            if (part.expression->type != ValueType::INT && part.expression->type != ValueType::BOOL &&
+                part.expression->type != ValueType::STRING && part.expression->type != ValueType::UNKNOWN)
+                throw std::runtime_error("String interpolation supports integer, boolean, and string expressions");
         }
         const_cast<InterpolatedStringExpr*>(interpolated)->type = ValueType::STRING;
         return;
