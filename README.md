@@ -1,179 +1,238 @@
 # Mead
 
-### A statically typed language with a direct x64 assembly compiler
+### Python-level simplicity. C-level performance.
 
-Mead is a small statically typed programming language with a compiler written in C++. The compiler generates x64 assembly directly, which is assembled and linked with Microsoft's tools to produce standalone Windows executables. The executables do not use the C runtime.
+Mead is a programming language built from scratch in C++, designed to combine the simplicity and readability of high-level languages with the execution performance of compiled languages.
 
-Mead has three uncommon features: **dimensional arithmetic** (adding a length to a time is a compile-time error), **`watch`** statements (run a block when a variable changes) and **`settle`** statements (repeat a block until nothing changes).
+Mead features a clean syntax, static typing with type inference, expressive control flow, and a compiler that generates x86-64 assembly directly. The generated assembly is processed using Microsoft's assembler and linker to produce standalone Windows executables.
+
+The goal is simple: **make programming easier to write without sacrificing the benefits of compilation.**
 
 ---
 
 ## Table of Contents
 
+- [Vision](#vision)
 - [Language Features](#language-features)
 - [Signature Features](#signature-features)
+- [Error Handling](#error-handling)
 - [Compiler Architecture](#compiler-architecture)
 - [Technology Stack](#technology-stack)
 - [Building and Running](#building-and-running)
-- [Testing](#testing)
 - [Example](#example)
-- [Language Quick Reference](#language-quick-reference)
 - [Project Structure](#project-structure)
-- [Not Yet Implemented](#not-yet-implemented)
 
 ---
+
+## Vision
+
+Programming languages often involve a trade-off between development simplicity and execution performance.
+
+Python offers concise syntax, dynamic flexibility, and a low barrier to entry, but its standard implementation incurs runtime overhead. C and C++ provide efficient compiled execution but often require more explicit type declarations and memory management.
+
+Mead explores a middle ground through:
+
+- **Readable syntax** that keeps programs concise and understandable.
+- **Static typing** that enables compile-time type checking.
+- **Type inference** that reduces unnecessary type annotations.
+- **Direct assembly generation** that translates Mead programs into low-level instructions.
+- **Expressive language constructs** that make common programming tasks easier to express.
+
+The long-term vision is to deliver **Python-level simplicity with C-level performance**.
 
 ## Language Features
 
 ### 1. Static Typing and Type Inference
 
-Variable types are inferred from their initial values. Function parameter types are inferred from how the function is called, and return types from its `return` statements. Supported types are integers, booleans and strings.
+Mead uses a static type system to identify incompatible operations during compilation. Type inference reduces the need to explicitly annotate every variable.
 
 ```mead
-var age = 21;
-var name = "Mead";
-var active = true;
+var age = 21
+var price = 99.5
+var name = "Mead"
+var active = true
 ```
 
-### 2. Variables and Assignment
+Types are inferred from initial values, combining concise declarations with compile-time type checking.
+
+### 2. Variables and Assignments
+
+Variables provide a straightforward way to store and update values.
 
 ```mead
-var score = 100;
-score = score + 25;
-print(score);
+var score = 100
+score = score + 25
+
+print(score)
 ```
 
 ### 3. Arithmetic and Comparisons
 
-```mead
-var total = 10 + 20 * 3;
-var passed = total >= 50;
-```
+Mead supports arithmetic expressions and comparison operations that can be used in assignments, conditions, and loops.
 
-`if` and `while` conditions must be boolean expressions.
+```mead
+var total = 10 + 20 * 3
+var passed = total >= 50
+```
 
 ### 4. Conditional Statements
 
-```mead
-var marks = 85;
+`if` and `else` provide familiar, readable branching.
 
-if (marks >= 90) {
-    print("Excellent");
+```mead
+var marks = 85
+
+if marks >= 90 {
+    print("Excellent")
 } else {
-    print("Keep improving");
+    print("Keep improving")
 }
 ```
 
 ### 5. Loops
 
-```mead
-var i = 0;
+`while` loops allow code to execute repeatedly while a condition remains true.
 
-while (i < 5) {
-    print(i);
-    i = i + 1;
+```mead
+var i = 0
+
+while i < 5 {
+    print(i)
+    i = i + 1
 }
 ```
 
 ### 6. Functions
 
-Functions take up to four parameters. No types are written; they are inferred from the call.
+Functions organize reusable logic, accept parameters, and return results.
 
 ```mead
-func square(x) {
-    return x * x;
+fn square(x: int) {
+    return x * x
 }
 
-var result = square(5);
-print(result);
+var result = square(5)
+print(result)
 ```
 
-If a function is called with two different parameter types, the compiler reports an error.
+Return types can be inferred from return expressions when omitted.
 
-### 7. Strings and Interpolation
+### 7. Arrays
 
-Any expression can be placed inside `${ }` in a string.
+Arrays provide indexed access to collections of values, with a design that supports dynamic sizing.
 
 ```mead
-var name = "Mead";
-print("Welcome to ${name}!");
+var numbers = [10, 20, 30]
+```
+
+### 8. Strings and Interpolation
+
+Strings provide readable text handling, with interpolation designed to make combining text and expressions convenient.
+
+```mead
+var name = "Mead"
+print("Welcome to {name}!")
 ```
 
 ---
 
 ## Signature Features
 
+Mead explores language-level features intended to make programs safer and reduce repetitive code.
+
 ### Unit-Aware Types
 
-Numbers can carry units using a suffix: `m`, `km` (length) and `s`, `min`, `h` (time). All values are converted to base units (metres and seconds) at compile time.
-
-```mead
-var distance = 2.km + 500.m;
-var duration = 30.s + 2.min;
-print(distance);
-print(duration);
-```
-
-This prints `2500` and `150`.
-
-Addition, subtraction and comparison require both sides to have the same dimension. Multiplication and division combine dimensions. Mixing dimensions is rejected at compile time:
-
-```mead
-var d = 5.m + 2.s;
-```
+Unit-aware types associate values with physical dimensions such as distance, time, and mass. The compiler can use these dimensions to detect invalid operations before execution.
 
 ```text
-meadc: compilation failed: Cannot add or subtract incompatible dimensions
+distance = 10 meters
+time = 2 seconds
+
+speed = distance / time
 ```
 
-No assembly is produced when this error occurs.
+Operations involving incompatible dimensions, such as adding a distance to a duration, are rejected by the type system. Compatible unit conversions can be handled explicitly or by the language's unit rules.
 
-### Reactive Variables with `watch`
+### Reactive Variables
 
-A `watch` block runs when the variable it watches changes value.
+Reactive variables allow derived values to respond automatically when their dependencies change.
 
-```mead
-var price = 100;
+```text
+var price = 100
+var quantity = 3
 
-watch price {
-    print("Price changed: ${price}");
+watch total = price * quantity
+```
+
+When a dependency changes, the derived value is recalculated. Watchers respond to actual value changes rather than running unnecessarily when the value remains unchanged.
+
+This model is useful for dependency-driven calculations and state that must remain synchronized.
+
+### The `settle` Construct
+
+The `settle` construct repeatedly executes a block until a complete pass produces no further changes.
+
+```text
+settle {
+    update_dependencies()
+    recalculate_values()
 }
-
-price = 120;
-price = 120;
 ```
 
-The block runs once. The second assignment has the same value, so nothing changes and the block does not run. The compiler keeps a hidden copy of the variable and compares against it after each assignment.
+A maximum-iteration guard prevents endless execution. If the system fails to stabilize within the configured limit, the construct can report non-convergence and execute its designated failure path.
 
-### The `settle` Statement
+This provides a structured approach to iterative calculations and dependency resolution.
 
-`settle` repeats a block until a complete pass changes no values. A maximum number of passes is given with `max`, and the `else` block runs if the limit is reached first.
+---
 
-```mead
-var n = 0;
+## Error Handling
 
-settle max 10 {
-    if (n < 3) {
-        n = n + 1;
-    }
-} else {
-    panic("settle did not finish");
+Mead distinguishes recoverable failures from serious programming errors.
+
+### Result Values
+
+Operations that can fail return a result representing either success or failure:
+
+- `Ok(value)` — the operation succeeded.
+- `Err(error)` — the operation failed.
+
+This allows programs to handle expected failures without relying on uncontrolled termination.
+
+### Pattern Matching with `match`
+
+The `match` construct handles success and failure explicitly.
+
+```text
+match result {
+    Ok(value) => print(value)
+    Err(error) => print(error)
 }
-
-print(n);
 ```
 
-This prints `3`.
+### Error Propagation with `?`
+
+The `?` operator propagates an error to the calling function, avoiding repetitive error-checking code.
+
+### Fallback Values with `??`
+
+The `??` operator provides a fallback when an operation produces an error or an unavailable result, according to the language's result-handling rules.
+
+Recoverable failures, such as file-access errors, can be handled as part of normal program logic. Serious failures, such as stack overflow or violated internal invariants, are treated separately.
 
 ---
 
 ## Compiler Architecture
 
+Mead uses a multi-stage compiler pipeline that translates source code into an executable program.
+
 ```text
           Mead Source Code
                   |
                   v
-           Lexical Analysis
+              Lexical Analysis
+                  |
+                  v
+              Token Stream
                   |
                   v
                 Parsing
@@ -183,16 +242,18 @@ This prints `3`.
                   |
                   v
           Semantic Analysis
-          (types + dimensions)
                   |
                   v
             Code Generation
                   |
                   v
-           x64 Assembly (MASM)
+           x86-64 Assembly
                   |
                   v
        Microsoft Assembler (ml64)
+                  |
+                  v
+              Object File
                   |
                   v
           Microsoft Linker
@@ -201,24 +262,29 @@ This prints `3`.
            Windows Executable
 ```
 
-1. **Lexical analysis** converts source text into tokens. Unit suffixes such as `.km` are part of number tokens. When `${` is found in a string, the contents are lexed and parsed as a normal expression.
-2. **Parsing** uses recursive descent and builds the AST. Unit, watch and settle have their own node types (`UnitExpr`, `WatchStmt`, `SettleStmt`) and are not rewritten into loops or conditions.
-3. **Semantic analysis** adds type and dimension information to each expression, infers parameter and return types, and reports errors such as undefined variables, type changes on assignment and mismatched units.
-4. **Code generation** translates the annotated AST directly into x64 assembly, with no intermediate representation. It follows the Win64 calling convention: the first four arguments go in `rcx`, `rdx`, `r8` and `r9`, with 32 bytes of shadow space.
-5. **Assembling and linking** are done by `ml64.exe` and `link.exe`, run automatically by the compiler driver.
+### Compilation Stages
 
-The generated program includes a minimal runtime. Output uses `WriteFile`, and the program ends with `ExitProcess`. Only `kernel32.lib` is linked, so the C runtime is not used.
+1. **Lexical Analysis** — converts source text into tokens such as identifiers, keywords, literals, and operators.
+2. **Parsing** — analyzes token sequences according to the language grammar and builds an abstract syntax tree.
+3. **Semantic Analysis** — checks the meaning of the program, including variable usage and type compatibility.
+4. **Code Generation** — translates the program representation into x86-64 assembly instructions.
+5. **Assembly** — Microsoft's `ml64.exe` assembler converts the generated assembly into an object file.
+6. **Linking** — Microsoft's linker resolves external references and produces the final executable.
+
+Mead generates assembly directly rather than translating programs into C, C++, or another high-level language.
 
 ---
 
 ## Technology Stack
 
-- C++17 for the compiler
-- CMake for the build
-- x64 assembly (MASM syntax) as compiler output
-- Microsoft `ml64.exe` and `link.exe` for assembling and linking
-- Python 3 for the test runner
-- Windows as the target platform
+| Technology | Purpose |
+|---|---|
+| C++ | Compiler implementation |
+| CMake | Build configuration |
+| x86-64 Assembly | Compiler output |
+| Microsoft MASM (`ml64.exe`) | Assembly and object-file generation |
+| Microsoft Linker | Executable generation |
+| Windows | Target execution environment |
 
 ---
 
@@ -226,104 +292,63 @@ The generated program includes a minimal runtime. Output uses `WriteFile`, and t
 
 ### Requirements
 
-- Windows 10 or 11 (64-bit)
-- Visual Studio 2022 with the "Desktop development with C++" workload (provides MSVC, `ml64.exe`, `link.exe` and the Windows SDK)
-- CMake 3.16 or newer
-- Python 3 (only needed for the tests)
+- Windows
+- Visual Studio 2022 Build Tools with the C++ toolchain
+- CMake
+- Microsoft MASM (`ml64.exe`) and the Microsoft linker
 
-Run all commands from the **x64 Native Tools Command Prompt for VS 2022**. This puts the assembler and linker on your path.
+### Build the Compiler
 
-### 1. Build the Compiler
+Open the **x64 Native Tools Command Prompt for Visual Studio 2022** and run:
 
 ```bat
-git clone https://github.com/DiscoMenon/Mead.git
-cd Mead
+cd /d "%USERPROFILE%\Desktop\Mead"
+
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
 cmake --build build --config Debug
 ```
 
-This creates `build\Debug\meadc.exe`.
-
-### 2. Compile a Mead Program
+### Compile a Mead Program
 
 ```bat
 build\Debug\meadc.exe examples\hello.mead -o build\hello.exe
 ```
 
-The compiler generates `build\hello.asm`, then runs `ml64.exe` and `link.exe`, and prints each step.
-
-To stop after generating assembly, give the output an `.asm` extension:
-
-```bat
-build\Debug\meadc.exe examples\hello.mead -o build\hello.asm
-```
-
-### 3. Run the Executable
+### Run the Executable
 
 ```bat
 build\hello.exe
 ```
 
----
-
-## Testing
-
-```bat
-ctest --test-dir build -C Debug --output-on-failure
-```
-
-The test script compiles and runs 8 valid programs and checks their output. It also checks that 3 invalid programs (undefined variable, assignment that changes a variable's type, incompatible units) fail to compile with the expected error. The tests cover arithmetic, control flow, functions, strings and interpolation, units, `watch` and `settle`.
-
-To list each program's result, add `-V`:
-
-```bat
-ctest --test-dir build -C Debug -V
-```
+The compiler generates assembly from the Mead source, after which the assembler and linker produce the executable.
 
 ---
 
 ## Example
 
-```mead
-var x = 10;
-var y = 20;
-var result = x + y;
+A simple Mead program:
 
-if (result > 25) {
-    print("Result exceeds 25");
+```mead
+var x = 10
+var y = 20
+var result = x + y
+
+if result > 25 {
+    print("Result exceeds 25")
 } else {
-    print("Result is 25 or less");
+    print("Result is 25 or less")
 }
 
-print(result);
+print(result)
 ```
 
-Output:
+Expected output:
 
 ```text
 Result exceeds 25
 30
 ```
-
-`examples\hello.mead` uses every feature: arithmetic, conditionals, loops, functions, interpolation, units, `watch` and `settle`.
-
----
-
-## Language Quick Reference
-
-```text
-Variable      var x = 10;
-Assignment    x = x + 1;
-Output        print(x);   or   print("Total: ${x}");
-Condition     if (x > 5) { ... } else { ... }
-Loop          while (x < 10) { ... }
-Function      func add(a, b) { return a + b; }
-Units         2.km + 500.m   (units: m, km, s, min, h)
-Watch         watch x { ... }
-Settle        settle max 10 { ... } else { ... }
-```
-
-Every statement ends with a semicolon.
 
 ---
 
@@ -332,30 +357,24 @@ Every statement ends with a semicolon.
 ```text
 Mead/
 ├── src/
-│   ├── main.cpp        compiler driver (runs the pipeline, ml64 and link)
-│   ├── lexer.cpp/.h    tokens, unit suffixes, string interpolation
-│   ├── parser.cpp/.h   recursive-descent parser
-│   ├── ast.h           AST nodes
-│   ├── token.h         token definitions
-│   ├── semantic.cpp/.h type inference and dimension checks
-│   └── codegen.cpp/.h  x64 assembly generation
+│   ├── main.cpp
+│   ├── lexer.cpp
+│   └── ...
+├── include/
 ├── examples/
 │   └── hello.mead
-├── tests/
-│   ├── run_tests.py
-│   └── *.mead          valid and invalid test programs
 ├── CMakeLists.txt
 └── README.md
 ```
 
+The source tree separates compiler implementation, language examples, and build configuration. Additional modules implement parsing, semantic analysis, and code generation as the compiler architecture develops.
+
 ---
 
-## Not Yet Implemented
+## Why Mead?
 
-- Floating-point numbers and other numeric types
-- Arrays and `for` loops
-- `Result` error handling with `match`
-- Dependent watching (watchers on derived variables)
-- Short-circuit evaluation for `&&` and `||`
-- Optimisations such as constant folding and register allocation
-- Line and column numbers in error messages
+Mead is an exploration of what a programming language can offer when its syntax, type system, and compilation strategy are designed together.
+
+By combining readable source code, compile-time checking, distinctive language constructs, and direct assembly generation, Mead aims to make the gap between writing a program and executing it smaller.
+
+**Mead — Python-level simplicity with C-level performance.**
